@@ -1,0 +1,1 @@
+ D:/github/BufferFlowX/test/lib/libgtest.a D:/github/BufferFlowX/test/lib/libgmock.a D:/github/BufferFlowX/test/lib/libgtest_main.a -lpthread -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 
