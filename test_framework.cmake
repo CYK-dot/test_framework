@@ -3,10 +3,13 @@
 ##      enable_test_framework
 ## @brief 
 ##      Download gtest framework and build it
+## @warning
+##      should be called before add_subdirectory!!!!
 ## ==================================================================================
 function(enable_test_framework)
     if(NOT TARGET GTest::GTest)
         include(FetchContent)
+        message("[ .. ] downloading/checking gtest framework.....")
         FetchContent_Declare(
             googletest
             URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.tar.gz
@@ -18,6 +21,21 @@ function(enable_test_framework)
     
     enable_testing()
     include(GoogleTest)
+endfunction()
+
+## ==================================================================================
+## @function 
+##      enable_code_coverage
+## @brief 
+##      Enable code coverage instrumentation globally
+## @warning
+##      should be called before add_subdirectory!!!!
+## ==================================================================================
+function(enable_code_coverage)
+    set(CODE_COVERAGE ON CACHE BOOL "Enable code coverage instrumentation")
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
+    message(STATUS "Code coverage instrumentation enabled")
 endfunction()
 
 ## ==================================================================================
@@ -48,6 +66,7 @@ function(add_test_executable)
     
     #### create executable ####
     add_executable(${ARG_TARGET} ${ARG_TESTCASE_SOURCES})
+    target_compile_options(${ARG_TARGET} PRIVATE $<$<CONFIG:Debug>:-g>)
     
     #### link libraries ####
     target_link_libraries(${ARG_TARGET}
@@ -69,9 +88,9 @@ function(add_test_executable)
     
     gtest_discover_tests(${ARG_TARGET}
         TEST_PREFIX "${ARG_TARGET}."
-        XML_OUTPUT_DIR ${CMAKE_BINARY_DIR}/test_results
-    )
-    
+        EXTRA_ARGS "--gtest_output=xml:${CMAKE_BINARY_DIR}/test_results/"
+        PROPERTIES TIMEOUT 30
+        )
     message(STATUS "Added test executable: ${ARG_TARGET}")
 endfunction()
 
@@ -164,6 +183,9 @@ function(add_coverage_target)
     
     # Add custom target to generate coverage report
     add_custom_target(${ARG_TARGET}
+        # Ensure coverage directory exists
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ARG_REPORT_DIR}
+        
         # Run tests to generate coverage data
         COMMAND $<TARGET_FILE:${ARG_TEST_TARGET}> --gtest_output=xml:${CMAKE_BINARY_DIR}/test_results/${ARG_TEST_TARGET}.xml
         
@@ -195,69 +217,17 @@ function(add_coverage_target)
     if(NOT CODE_COVERAGE)
         message(WARNING "Code coverage is not enabled. Set CODE_COVERAGE=ON when configuring CMake.")
     endif()
-    
-    message(STATUS "Added coverage target: ${ARG_TARGET}")
-    message(STATUS "  Test target: ${ARG_TEST_TARGET}")
-    message(STATUS "  Report directory: ${ARG_REPORT_DIR}")
-endfunction()
 
-## ==================================================================================
-## @function 
-##      enable_code_coverage
-## @brief 
-##      Enable code coverage instrumentation globally
-## ==================================================================================
-function(enable_code_coverage)
-    set(CODE_COVERAGE ON CACHE BOOL "Enable code coverage instrumentation")
-    
-    if(CODE_COVERAGE)
-        # Add coverage flags for all targets
-        add_compile_options(--coverage)
-        add_link_options(--coverage)
-        
-        message(STATUS "Code coverage instrumentation enabled")
-    endif()
-endfunction()
-
-## ==================================================================================
-## @function 
-##      setup_test_infrastructure
-## @brief 
-##      Setup complete test infrastructure with one call
-## @param 
-##      TEST_TARGET - name of the test executable target
-##      SOURCES - test source files
-##      LIBS - libraries to link with
-##      COVERAGE_TARGET - name of the coverage target (optional)
-## ==================================================================================
-function(setup_test_infrastructure)
-    set(options "")
-    set(oneValueArgs TEST_TARGET COVERAGE_TARGET)
-    set(multiValueArgs SOURCES LIBS)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-    
-    # Validate arguments
-    if(NOT ARG_TEST_TARGET)
-        message(FATAL_ERROR "TEST_TARGET argument is required for setup_test_infrastructure")
-    endif()
-    
-    # Enable test framework
-    enable_test_framework()
-    
-    # Add test executable
-    add_test_executable(
-        TARGET ${ARG_TEST_TARGET}
-        TESTCASE_SOURCES ${ARG_SOURCES}
-        PRODUCT_LIBS ${ARG_LIBS}
+    add_custom_target(${ARG_TARGET}_clean
+        COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/coverage
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/*.gcda
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/*.gcno
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/**/*.gcda
+        COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/**/*.gcno
+        COMMENT "Cleaning coverage data"
     )
     
-    # Add coverage target if requested
-    if(ARG_COVERAGE_TARGET AND CODE_COVERAGE)
-        add_coverage_target(
-            TARGET ${ARG_COVERAGE_TARGET}
-            TEST_TARGET ${ARG_TEST_TARGET}
-        )
-    endif()
-    
-    message(STATUS "Test infrastructure setup complete for ${ARG_TEST_TARGET}")
+    message(STATUS "Added coverage target: ${ARG_TARGET} and ${ARG_TARGET}_clean")
+    message(STATUS "  Test target: ${ARG_TEST_TARGET}")
+    message(STATUS "  Report directory: ${ARG_REPORT_DIR}")
 endfunction()
